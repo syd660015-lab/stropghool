@@ -12,7 +12,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { FullResults, Participant } from './types';
+import { FullResults, Participant } from '../types';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
@@ -60,7 +60,7 @@ export async function testConnection() {
   }
 }
 
-export async function saveSession(participant: Participant, results: FullResults, isSimulation: boolean = false, profileName: string = '') {
+export async function saveSession(participant: Participant, results: FullResults, isSimulation: boolean = false, profileName: string = '', notes: string = '') {
   const path = 'sessions';
   try {
     await addDoc(collection(db, path), {
@@ -68,6 +68,7 @@ export async function saveSession(participant: Participant, results: FullResults
       results,
       isSimulation,
       profileName,
+      notes,
       createdAt: serverTimestamp()
     });
   } catch (error) {

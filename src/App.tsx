@@ -19,8 +19,22 @@ import {
   Trash2,
   Cpu,
   BrainCircuit,
-  Wand2
+  Wand2,
+  MessageSquare,
+  FileText
 } from 'lucide-react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Cell,
+  LineChart,
+  Line
+} from 'recharts';
 import { Participant, FullResults, TestStep, ColorMap, TestResult, SimulationProfile } from './types.ts';
 import { getFullSequence, SIMULATION_PROFILES } from './constants.ts';
 import { saveSession, fetchHistory } from './services/firebase';
@@ -39,12 +53,37 @@ export default function App() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [notes, setNotes] = useState('');
   const [participant, setParticipant] = useState<Participant>({
     firstName: '',
     lastName: '',
+    birthDate: '',
     age: '',
     testDate: new Date().toISOString().split('T')[0]
   });
+
+  // Calculate age when birthDate or testDate changes
+  useEffect(() => {
+    if (participant.birthDate && participant.testDate) {
+      const birthDate = new Date(participant.birthDate);
+      const testDate = new Date(participant.testDate);
+      
+      let years = testDate.getFullYear() - birthDate.getFullYear();
+      let months = testDate.getMonth() - birthDate.getMonth();
+      let days = testDate.getDate() - birthDate.getDate();
+
+      if (days < 0) {
+        months--;
+      }
+      if (months < 0) {
+        years--;
+      }
+      
+      if (!isNaN(years) && years >= 0) {
+        setParticipant(prev => ({ ...prev, age: years.toString() }));
+      }
+    }
+  }, [participant.birthDate, participant.testDate]);
 
   const [results, setResults] = useState<FullResults>({
     test1: { frequency: 0, errors: 0 },
@@ -149,7 +188,7 @@ export default function App() {
     } else {
       setStage('summary');
       if (!isPracticeMode) {
-        saveSession(participant, results, isSimulationMode, selectedProfile?.name || '');
+        saveSession(participant, results, isSimulationMode, selectedProfile?.name || '', notes);
       }
     }
   };
@@ -197,6 +236,8 @@ export default function App() {
   const resetAll = () => {
     setStage('info');
     setCurrentTest(1);
+    setNotes('');
+    setCurrentStepIndex(0);
     setResults({
       test1: { frequency: 0, errors: 0 },
       test2: { frequency: 0, errors: 0 },
@@ -204,7 +245,21 @@ export default function App() {
       test4: { frequency: 0, errors: 0 },
       interferenceScore: 0
     });
+    setParticipant({
+      firstName: '',
+      lastName: '',
+      birthDate: '',
+      age: '',
+      testDate: new Date().toISOString().split('T')[0]
+    });
   };
+
+  const chartData = [
+    { name: 'أ', frequency: results.test1.frequency, errors: results.test1.errors, score: calculateFinalResult(results.test1) },
+    { name: 'ب (ق)', frequency: results.test2.frequency, errors: results.test2.errors, score: calculateFinalResult(results.test2) },
+    { name: 'ج', frequency: results.test3.frequency, errors: results.test3.errors, score: calculateFinalResult(results.test3) },
+    { name: 'ب (ت)', frequency: results.test4.frequency, errors: results.test4.errors, score: calculateFinalResult(results.test4) },
+  ];
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 overflow-x-hidden font-sans" dir="rtl">
@@ -245,6 +300,11 @@ export default function App() {
               className="flex flex-col gap-8"
             >
               <div className="bg-white p-10 rounded-xl border border-slate-200 shadow-sm max-w-2xl mx-auto w-full">
+                <div className="mb-10 text-center border-b border-slate-100 pb-8">
+                  <h3 className="text-xl font-black text-slate-800">إعداد وبرمجة: دكتور. أحمد حمدي عاشور الغول</h3>
+                  <p className="text-slate-500 text-sm font-bold mt-2">دكتوراه في علم النفس التربوي وخبير مايكروسوفت لتكنولوجيا المعلومات</p>
+                </div>
+
                 <div className="mb-10 flex justify-between items-start">
                   <div>
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">بيانات المشارك</h2>
@@ -334,25 +394,21 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">العمر</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">تاريخ الميلاد</label>
                   <input 
-                    type="number" 
-                    min="1"
-                    max="120"
-                    className="w-full bg-slate-50 p-4 rounded-lg border border-slate-100 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all placeholder:text-slate-300"
-                    value={participant.age}
-                    onChange={e => {
-                      const val = parseInt(e.target.value);
-                      if (!isNaN(val) && val > 0) {
-                        setParticipant({...participant, age: e.target.value});
-                      } else if (e.target.value === '') {
-                        setParticipant({...participant, age: ''});
-                      }
-                    }}
-                    placeholder="25"
+                    type="date" 
+                    className="w-full bg-slate-50 p-4 rounded-lg border border-slate-100 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                    value={participant.birthDate}
+                    onChange={e => setParticipant({...participant, birthDate: e.target.value})}
                   />
                 </div>
                 <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">العمر (محسوب تلقائياً)</label>
+                  <div className="w-full bg-slate-100 p-4 rounded-lg border border-slate-100 font-bold text-indigo-600">
+                    {participant.age || 'يرجى تحديد تاريخ الميلاد'}
+                  </div>
+                </div>
+                <div className="space-y-2 md:col-span-2">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">تاريخ الاختبار</label>
                   <input 
                     type="date" 
@@ -705,6 +761,60 @@ export default function App() {
                   </table>
                 </div>
 
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                  <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-sm">
+                    <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+                      <TrendingUp size={18} className="text-indigo-500" />
+                      الأداء عبر البطاقات
+                    </h3>
+                    <div className="h-[300px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                          <XAxis 
+                            dataKey="name" 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{ fill: '#64748B', fontSize: 12, fontWeight: 700 }}
+                            dy={10}
+                          />
+                          <YAxis 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{ fill: '#64748B', fontSize: 12 }} 
+                          />
+                          <Tooltip 
+                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                            cursor={{ fill: '#F1F5F9' }}
+                          />
+                          <Bar dataKey="frequency" name="الترددات" radius={[4, 4, 0, 0]} barSize={32}>
+                            {chartData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill="#4F46E5" />
+                            ))}
+                          </Bar>
+                          <Bar dataKey="errors" name="الأخطاء" fill="#F43F5E" radius={[4, 4, 0, 0]} barSize={32} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-sm">
+                    <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+                      <MessageSquare size={18} className="text-indigo-500" />
+                      ملاحظات المحلل السريري
+                    </h3>
+                    <textarea
+                      placeholder="أضف ملاحظاتك أو انطباعاتك المهنية حول سلوك المفحوص واستجابته..."
+                      className="w-full h-[240px] bg-slate-50 border border-slate-100 rounded-lg p-4 outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none font-medium text-slate-700"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                    />
+                    <div className="mt-4 flex justify-end">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">يتم حفظ الملاحظات تلقائياً مع الجلسة عند الانتهاء</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="bg-indigo-600 rounded-xl p-8 text-white shadow-lg shadow-indigo-100 flex items-center justify-between border-r-8 border-indigo-400">
                     <div className="flex items-center gap-4">
@@ -797,6 +907,23 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+      {/* Footer / Credits */}
+      <footer className="mt-auto py-12 px-8 border-t border-slate-200 bg-white">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 text-center md:text-right">
+          <div className="flex flex-col gap-1">
+            <p className="text-slate-800 font-black text-lg">إعداد وبرمجة: دكتور. أحمد حمدي عاشور الغول</p>
+            <p className="text-slate-500 text-sm font-bold">دكتوراه في علم النفس التربوي وخبير مايكروسوفت لتكنولوجيا المعلومات</p>
+          </div>
+          <div className="flex gap-4 opacity-50">
+            <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center">
+              <Cpu size={20} />
+            </div>
+            <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center">
+              <ClipboardCheck size={20} />
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

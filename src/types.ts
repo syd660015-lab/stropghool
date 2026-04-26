@@ -15,6 +15,7 @@ export const ColorMap: Record<string, string> = {
 export interface Participant {
   firstName: string;
   lastName: string;
+  birthDate: string;
   age: string;
   testDate: string;
 }

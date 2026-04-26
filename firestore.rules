@@ -18,6 +18,7 @@ service cloud.firestore {
     function isValidParticipant(p) {
       return p.firstName is string && p.firstName.size() > 0 && p.firstName.size() < 100 &&
              p.lastName is string && p.lastName.size() > 0 && p.lastName.size() < 100 &&
+             p.birthDate is string &&
              p.age is string &&
              p.testDate is string;
     }
@@ -35,6 +36,7 @@ service cloud.firestore {
              data.results.interferenceScore is number &&
              data.isSimulation is bool &&
              data.profileName is string &&
+             (data.get('notes', '') is string) &&
              data.createdAt == request.time;
     }
 
