@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidParticipant(p) {
+      return p.firstName is string && p.firstName.size() > 0 && p.firstName.size() < 100 &&
+             p.lastName is string && p.lastName.size() > 0 && p.lastName.size() < 100 &&
+             p.age is string &&
+             p.testDate is string;
+    }
+
+    function isValidTestResult(tr) {
+      return tr.frequency is number && tr.errors is number;
+    }
+
+    function isValidSession(data) {
+      return isValidParticipant(data.participant) &&
+             isValidTestResult(data.results.test1) &&
+             isValidTestResult(data.results.test2) &&
+             isValidTestResult(data.results.test3) &&
+             isValidTestResult(data.results.test4) &&
+             data.results.interferenceScore is number &&
+             data.isSimulation is bool &&
+             data.profileName is string &&
+             data.createdAt == request.time;
+    }
+
+    match /sessions/{sessionId} {
+      allow list: if true; // Allow anyone to see history for this applet
+      allow get: if true;
+      allow create: if isValidId(sessionId) && isValidSession(request.resource.data);
+      allow update, delete: if false;
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "session": {
+      "title": "Test Session",
+      "description": "A record of a completed Stroop test session",
+      "type": "object",
+      "properties": {
+        "participant": {
+          "type": "object",
+          "properties": {
+            "firstName": { "type": "string" },
+            "lastName": { "type": "string" },
+            "age": { "type": "string" },
+            "testDate": { "type": "string" }
+          },
+          "required": ["firstName", "lastName", "age", "testDate"]
+        },
+        "results": {
+          "type": "object",
+          "properties": {
+            "test1": { "$ref": "#/entities/testResult" },
+            "test2": { "$ref": "#/entities/testResult" },
+            "test3": { "$ref": "#/entities/testResult" },
+            "test4": { "$ref": "#/entities/testResult" },
+            "interferenceScore": { "type": "number" }
+          },
+          "required": ["test1", "test2", "test3", "test4", "interferenceScore"]
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isSimulation": { "type": "boolean" },
+        "profileName": { "type": "string" }
+      },
+      "required": ["participant", "results", "createdAt"]
+    },
+    "testResult": {
+      "title": "Test Result",
+      "description": "Specific results for one test card",
+      "type": "object",
+      "properties": {
+        "frequency": { "type": "number" },
+        "errors": { "type": "number" }
+      },
+      "required": ["frequency", "errors"]
+    }
+  },
+  "firestore": {
+    "/sessions/{sessionId}": {
+      "schema": "session",
+      "description": "Storage for all completed Stroop test sessions"
+    }
+  }
+}
