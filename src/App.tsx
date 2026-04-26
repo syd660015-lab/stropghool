@@ -35,9 +35,18 @@ import {
   LineChart,
   Line
 } from 'recharts';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { Participant, FullResults, TestStep, ColorMap, TestResult, SimulationProfile } from './types.ts';
 import { getFullSequence, SIMULATION_PROFILES } from './constants.ts';
-import { saveSession, fetchHistory } from './services/firebase';
+import { 
+  saveSession, 
+  fetchHistory, 
+  auth, 
+  signInWithGoogle, 
+  signOutUser,
+  FirebaseUser
+} from './services/firebase';
 import { generateSimulationEvents, SimulationEvent } from './services/aiSimulationService';
 
 const TEST_DURATION = 45; // 45 seconds per test
@@ -53,7 +62,11 @@ export default function App() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [notes, setNotes] = useState('');
+  const [examinerObservations, setExaminerObservations] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+  const summaryRef = useRef<HTMLDivElement>(null);
   const [participant, setParticipant] = useState<Participant>({
     firstName: '',
     lastName: '',
@@ -92,6 +105,13 @@ export default function App() {
     test4: { frequency: 0, errors: 0 },
     interferenceScore: 0
   });
+
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged((u) => {
+      setUser(u);
+    });
+    return () => unsub();
+  }, []);
 
   const [timeLeft, setTimeLeft] = useState(TEST_DURATION);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -188,7 +208,7 @@ export default function App() {
     } else {
       setStage('summary');
       if (!isPracticeMode) {
-        saveSession(participant, results, isSimulationMode, selectedProfile?.name || '', notes);
+        saveSession(participant, results, isSimulationMode, selectedProfile?.name || '', notes, examinerObservations);
       }
     }
   };
@@ -237,6 +257,7 @@ export default function App() {
     setStage('info');
     setCurrentTest(1);
     setNotes('');
+    setExaminerObservations('');
     setCurrentStepIndex(0);
     setResults({
       test1: { frequency: 0, errors: 0 },
@@ -261,6 +282,33 @@ export default function App() {
     { name: 'ب (ت)', frequency: results.test4.frequency, errors: results.test4.errors, score: calculateFinalResult(results.test4) },
   ];
 
+  const handleDownloadPDF = async () => {
+    if (!summaryRef.current) return;
+    
+    setIsExporting(true);
+    try {
+      const element = summaryRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#FFFFFF',
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = 210;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      pdf.save(`Stroop_Report_${participant.firstName}_${participant.lastName}_${participant.testDate}.pdf`);
+    } catch (error) {
+      console.error('PDF Generation Error:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 overflow-x-hidden font-sans" dir="rtl">
       {/* Header */}
@@ -275,17 +323,41 @@ export default function App() {
               <p className="text-[10px] text-slate-500 font-medium -mt-1 uppercase tracking-widest">Stroop Cognitive Test</p>
             </div>
           </div>
-          {stage !== 'info' && (
-            <div className="flex items-center gap-4">
-              <div className="text-right ml-4">
-                <p className="text-sm font-bold text-slate-800">{participant.firstName} {participant.lastName}</p>
-                <p className="text-xs text-slate-500">الجلسة الحالية</p>
+          <div className="flex items-center gap-6">
+            {!user ? (
+              <button 
+                onClick={() => signInWithGoogle()}
+                className="bg-white hover:bg-slate-50 text-slate-700 py-2 px-6 rounded-lg font-bold border border-slate-200 shadow-sm transition-all flex items-center justify-center gap-2 text-sm"
+              >
+                تسجيل الدخول <User size={18} className="text-slate-400" />
+              </button>
+            ) : (
+              <div className="flex items-center gap-4">
+                <div className="text-right hidden sm:block">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">مرحباً</p>
+                  <p className="text-xs font-bold text-slate-800">{user.displayName}</p>
+                </div>
+                <button 
+                  onClick={() => signOutUser()}
+                  className="bg-white hover:bg-red-50 text-red-600 py-2 px-4 rounded-lg font-bold border border-slate-200 shadow-sm transition-all text-xs"
+                >
+                  خروج
+                </button>
               </div>
-              <div className="w-10 h-10 bg-indigo-100 rounded-full border-2 border-white shadow-sm flex items-center justify-center text-indigo-700 font-bold uppercase">
-                {participant.firstName[0]}{participant.lastName[0]}
+            )}
+
+            {stage !== 'info' && (
+              <div className="flex items-center gap-4">
+                <div className="text-right ml-4">
+                  <p className="text-sm font-bold text-slate-800">{participant.firstName} {participant.lastName}</p>
+                  <p className="text-xs text-slate-500">الجلسة الحالية</p>
+                </div>
+                <div className="w-10 h-10 bg-indigo-100 rounded-full border-2 border-white shadow-sm flex items-center justify-center text-indigo-700 font-bold uppercase">
+                  {participant.firstName[0]}{participant.lastName[0]}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </header>
 
@@ -318,7 +390,13 @@ export default function App() {
                       <AlertCircle size={18} /> ما هو اختبار سترووب؟
                     </button>
                     <button 
-                      onClick={loadHistory}
+                      onClick={() => {
+                        if (!user) {
+                          signInWithGoogle().then(() => loadHistory());
+                        } else {
+                          loadHistory();
+                        }
+                      }}
                       disabled={loadingHistory}
                       className="text-slate-600 font-bold text-sm bg-slate-50 px-4 py-2 rounded-lg hover:bg-slate-100 transition-all flex items-center gap-2"
                     >
@@ -694,6 +772,8 @@ export default function App() {
                             onClick={() => {
                               setParticipant(item.participant);
                               setResults(item.results);
+                              setNotes(item.notes || '');
+                              setExaminerObservations(item.examinerObservations || '');
                               setStage('summary');
                             }}
                             className="text-indigo-600 font-bold text-sm bg-indigo-50 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-all"
@@ -712,6 +792,7 @@ export default function App() {
           {stage === 'summary' && (
             <motion.div 
               key="summary"
+              ref={summaryRef}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col max-w-5xl mx-auto w-full overflow-hidden"
@@ -815,6 +896,19 @@ export default function App() {
                   </div>
                 </div>
 
+                <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-sm">
+                  <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+                    <FileText size={18} className="text-indigo-500" />
+                    ملاحظات الفاحص والتدريب
+                  </h3>
+                  <textarea
+                    placeholder="سجل أي ملاحظات بخصوص عملية التدريب أو الأداء الملحوظ أثناء الجلسة..."
+                    className="w-full h-[160px] bg-slate-50 border border-slate-100 rounded-lg p-4 outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none font-medium text-slate-700"
+                    value={examinerObservations}
+                    onChange={(e) => setExaminerObservations(e.target.value)}
+                  />
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="bg-indigo-600 rounded-xl p-8 text-white shadow-lg shadow-indigo-100 flex items-center justify-between border-r-8 border-indigo-400">
                     <div className="flex items-center gap-4">
@@ -852,6 +946,17 @@ export default function App() {
               </div>
 
               <div className="px-8 py-6 bg-slate-50 border-t border-slate-100 flex flex-col md:flex-row gap-4 justify-center items-center">
+                <button 
+                  onClick={handleDownloadPDF}
+                  disabled={isExporting}
+                  className="w-full max-w-sm py-4 bg-indigo-600 text-white rounded-lg font-bold shadow-md shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isExporting ? (
+                     <> جاري التحميل... </>
+                  ) : (
+                     <> <FileText size={20} /> تحميل ملف PDF </>
+                  )}
+                </button>
                 <button 
                   onClick={() => window.print()}
                   className="w-full max-w-sm py-4 bg-white border-2 border-slate-200 text-slate-700 rounded-lg font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
@@ -913,6 +1018,16 @@ export default function App() {
           <div className="flex flex-col gap-1">
             <p className="text-slate-800 font-black text-lg">إعداد وبرمجة: دكتور. أحمد حمدي عاشور الغول</p>
             <p className="text-slate-500 text-sm font-bold">دكتوراه في علم النفس التربوي وخبير مايكروسوفت لتكنولوجيا المعلومات</p>
+            {user?.email === 'ashoorgool2003@gmail.com' && (
+              <a 
+                href="https://console.firebase.google.com/project/annular-hexagon-481017-v4/firestore/databases/ai-studio-741bc19d-4ec4-4aab-9038-c49ad720f53a/data"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 text-indigo-600 hover:underline font-bold text-xs flex items-center gap-1 justify-center md:justify-start"
+              >
+                الدخول إلى قاعدة البيانات (Firebase Console) <ArrowRight size={12} />
+              </a>
+            )}
           </div>
           <div className="flex gap-4 opacity-50">
             <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center">
