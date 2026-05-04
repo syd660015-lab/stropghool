@@ -208,7 +208,13 @@ export default function App() {
     } else {
       setStage('summary');
       if (!isPracticeMode) {
-        saveSession(participant, results, isSimulationMode, selectedProfile?.name || '', notes, examinerObservations);
+        // Calculate interference score immediately to save the correct value
+        const res3 = calculateFinalResult(results.test3);
+        const res4 = calculateFinalResult(results.test4);
+        const interferenceScore = res3 - res4;
+        
+        const finalResults = { ...results, interferenceScore };
+        saveSession(participant, finalResults, isSimulationMode, selectedProfile?.name || '', notes, examinerObservations);
       }
     }
   };
@@ -680,7 +686,7 @@ export default function App() {
                         </span>
                       )}
                       <div className="mt-10 px-6 py-2 bg-slate-50 border border-slate-100 rounded-full text-slate-400 font-bold text-sm tracking-widest uppercase">
-                        Next: {testSteps[currentStepIndex+1]?.word === 'rectangle' ? 'Shape' : testSteps[currentStepIndex+1]?.word || 'End'}
+                        التالي: {testSteps[currentStepIndex+1]?.word === 'rectangle' ? 'شكل' : testSteps[currentStepIndex+1]?.word || 'نهاية'}
                       </div>
                     </motion.div>
                   )}

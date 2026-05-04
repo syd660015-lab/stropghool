@@ -1,7 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { SimulationProfile } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let aiInstance: GoogleGenAI | null = null;
+
+function getAI() {
+  if (!aiInstance) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      // In a real Vercel production build, this should be defined in env
+      // But we prevent early crash by using a dummy key if missing during build
+      console.warn("GEMINI_API_KEY is missing. AI simulation will use fallback.");
+      return null;
+    }
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+}
 
 export interface SimulationEvent {
   type: 'correct' | 'error' | 'correction';
@@ -9,6 +23,9 @@ export interface SimulationEvent {
 }
 
 export async function generateSimulationEvents(profile: SimulationProfile, testNum: number): Promise<SimulationEvent[]> {
+  const ai = getAI();
+  if (!ai) return generateFallbackEvents(profile, testNum);
+
   const systemInstruction = `
     You are a simulator for the Stroop Neuropsychological Test. 
     You need to generate a realistic sequence of participant responses (Correct, Error, Correction) for a 45-second session.
